@@ -1,0 +1,294 @@
+
+"""
+Анализ датасета Adult Income
+https://archive.ics.uci.edu/dataset/2/adult
+"""
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.impute import SimpleImputer
+import warnings
+
+warnings.filterwarnings('ignore')
+
+# Настройка отображения
+plt.style.use('seaborn-v0_8')
+sns.set_palette("husl")
+pd.set_option('display.max_columns', None)
+
+print("=" * 60)
+print("АНАЛИЗ ДАТАСЕТА ADULT INCOME")
+print("=" * 60)
+
+# =============================================================================
+# 1. ЗАГРУЗКА ДАННЫХ
+# =============================================================================
+
+print("\n1. ЗАГРУЗКА ДАННЫХ...")
+
+columns = [
+    'age', 'workclass', 'fnlwgt', 'education', 'education-num',
+    'marital-status', 'occupation', 'relationship', 'race', 'sex',
+    'capital-gain', 'capital-loss', 'hours-per-week', 'native-country', 'income'
+]
+
+url_train = "https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data"
+df_train = pd.read_csv(url_train, names=columns, na_values=' ?', skipinitialspace=True)
+
+url_test = "https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.test"
+df_test = pd.read_csv(url_test, names=columns, na_values=' ?', skipinitialspace=True, skiprows=1)
+
+df = pd.concat([df_train, df_test], ignore_index=True)
+
+df['income'] = df['income'].str.replace('.', '', regex=False)
+
+print("✅ Данные успешно загружены!")
+print(f"Размер объединенного датасета: {df.shape}")
+
+# =============================================================================
+# 2. ПРЕДВАРИТЕЛЬНЫЙ АНАЛИЗ
+# =============================================================================
+
+print("\n2. ПРЕДВАРИТЕЛЬНЫЙ АНАЛИЗ ДАННЫХ")
+print("-" * 40)
+
+print("Информация о датасете:")
+print(f"Размер данных: {df.shape[0]} строк, {df.shape[1]} столбцов")
+
+print("\n Типы данных:")
+print(df.dtypes)
+
+# =============================================================================
+# 3. ОТВЕТЫ НА ВОПРОСЫ
+# =============================================================================
+
+print("\n" + "=" * 60)
+print("ОТВЕТЫ НА ВОПРОСЫ")
+print("=" * 60)
+
+# Вопрос 1: Число столбцов в наборе данных
+q1 = df.shape[1]
+print(f"\n1️⃣ ЧИСЛО СТОЛБЦОВ В НАБОРЕ ДАННЫХ: {q1}")
+
+# Вопрос 2: Пропуски в данных
+print("\n2️⃣ АНАЛИЗ ПРОПУЩЕННЫХ ДАННЫХ:")
+missing_data = df.isnull().sum()
+missing_percent = (missing_data / len(df)) * 100
+
+missing_info = pd.DataFrame({
+    'Пропущено значений': missing_data,
+    'Процент пропусков': missing_percent.round(2)
+})
+
+print(missing_info[missing_info['Пропущено значений'] > 0])
+
+if missing_data.sum() == 0:
+    print("✅ Пропущенных данных нет")
+else:
+    columns_with_missing = missing_data[missing_data > 0].index.tolist()
+    print(f" Столбцы с пропусками: {', '.join(columns_with_missing)}")
+
+# Вопрос 3: Количество уникальных значений в столбце race
+q3 = df['race'].nunique()
+unique_races = df['race'].value_counts()
+print(f"\n3️⃣ КОЛИЧЕСТВО УНИКАЛЬНЫХ ЗНАЧЕНИЙ В СТОЛБЦЕ RACE: {q3}")
+print("Распределение по расам:")
+print(unique_races)
+
+# Вопрос 4: Медиана hours-per-week
+q4 = df['hours-per-week'].median()
+print(f"\n4️⃣ МЕДИАНА HOURS-PER-WEEK: {q4}")
+
+# Вопрос 5: Кого больше - женщин или мужчин с ЗП > 50K?
+high_income = df[df['income'] == '>50K']
+gender_high_income = high_income['sex'].value_counts()
+
+print(f"\n5️⃣ РАСПРЕДЕЛЕНИЕ ПО ПОЛУ С ЗП >50K:")
+print(gender_high_income)
+
+if len(gender_high_income) >= 2:
+    if gender_high_income['Male'] > gender_high_income['Female']:
+        result = "Мужчин больше"
+        difference = gender_high_income['Male'] - gender_high_income['Female']
+    else:
+        result = "Женщин больше"
+        difference = gender_high_income['Female'] - gender_high_income['Male']
+
+    print(f" РЕЗУЛЬТАТ: {result} (разница: {difference} человек)")
+
+
+# =============================================================================
+# 4. ОБРАБОТКА ПРОПУЩЕННЫХ ДАННЫХ
+# =============================================================================
+
+print("\n" + "=" * 60)
+print("ОБРАБОТКА ПРОПУЩЕННЫХ ДАННЫХ")
+print("=" * 60)
+
+# Создаем копию данных для обработки
+df_cleaned = df.copy()
+
+if missing_data.sum() > 0:
+    print("Заполнение пропусков наиболее часто встречающимися значениями:")
+
+    for column in columns_with_missing:
+        if df[column].dtype == 'object':  # Категориальные переменные
+            mode_value = df[column].mode()[0] if not df[column].mode().empty else 'Unknown'
+            df_cleaned[column].fillna(mode_value, inplace=True)
+            print(f"   {column}: заполнено значением '{mode_value}'")
+        else:  # Числовые переменные
+            mode_value = df[column].mode()[0] if not df[column].mode().empty else df[column].median()
+            df_cleaned[column].fillna(mode_value, inplace=True)
+            print(f"   {column}: заполнено значением {mode_value}")
+
+    # Проверка после заполнения
+    missing_after = df_cleaned.isnull().sum().sum()
+    print(f"✅ Пропуски после заполнения: {missing_after}")
+else:
+    print("✅ Пропуски отсутствуют - заполнение не требуется")
+
+# =============================================================================
+# 5. АЛЬТЕРНАТИВНЫЕ МЕТОДЫ ЗАПОЛНЕНИЯ ПРОПУСКОВ
+# =============================================================================
+
+print("\n" + "=" * 60)
+print("АЛЬТЕРНАТИВНЫЕ МЕТОДЫ ЗАПОЛНЕНИЯ ПРОПУСКОВ")
+print("=" * 60)
+
+print("Возможные альтернативные методы заполнения пропусков:")
+
+alternatives = {
+        'Числовые переменные': [
+            "1. Медиана - устойчива к выбросам",
+            "2. Среднее значение - если распределение нормальное",
+            "3. Интерполяция - для временных рядов",
+            "4. Предсказание с помощью машинного обучения",
+            "5. Заполнение константой (0 или -1)"
+        ],
+        'Категориальные переменные': [
+            "1. Самое частое значение (мода) - как сделано выше",
+            "2. Значение 'Unknown' или 'Missing'",
+            "3. Предсказание на основе других признаков",
+            "4. K-Nearest Neighbors для нахождения похожих записей",
+            "5. Множественное импутирование (MICE)"
+        ]
+    }
+
+for category, methods in alternatives.items():
+    print(f"\n{category}:")
+    for method in methods:
+        print(f"   {method}")
+
+# =============================================================================
+# 6. ВИЗУАЛИЗАЦИЯ ДАННЫХ
+# =============================================================================
+
+print("\n" + "=" * 60)
+print("ВИЗУАЛИЗАЦИЯ ДАННЫХ")
+print("=" * 60)
+
+# Создаем графики
+fig, axes = plt.subplots(2, 3, figsize=(18, 12))
+fig.suptitle('ВИЗУАЛИЗАЦИЯ ДАННЫХ ADULT INCOME', fontsize=16, fontweight='bold')
+
+# 1. Распределение возраста
+axes[0, 0].hist(df['age'], bins=30, alpha=0.7, color='skyblue', edgecolor='black')
+axes[0, 0].set_title('Распределение возраста')
+axes[0, 0].set_xlabel('Возраст')
+axes[0, 0].set_ylabel('Частота')
+
+# 2. Распределение часов работы
+axes[0, 1].hist(df['hours-per-week'], bins=20, alpha=0.7, color='lightgreen', edgecolor='black')
+axes[0, 1].axvline(q4, color='red', linestyle='--', label=f'Медиана: {q4}')
+axes[0, 1].set_title('Распределение часов работы в неделю')
+axes[0, 1].set_xlabel('Часов в неделю')
+axes[0, 1].set_ylabel('Частота')
+axes[0, 1].legend()
+
+# 3. Распределение по расам
+race_counts = df['race'].value_counts()
+axes[0, 2].bar(race_counts.index, race_counts.values, color='lightcoral', alpha=0.7)
+axes[0, 2].set_title('Распределение по расам')
+axes[0, 2].set_xlabel('Раса')
+axes[0, 2].set_ylabel('Количество')
+axes[0, 2].tick_params(axis='x', rotation=45)
+
+# 4. Распределение доходов по полу
+income_by_sex = pd.crosstab(df['sex'], df['income'])
+income_by_sex.plot(kind='bar', ax=axes[1, 0], alpha=0.7)
+axes[1, 0].set_title('Доход по полу')
+axes[1, 0].set_xlabel('Пол')
+axes[1, 0].set_ylabel('Количество')
+axes[1, 0].legend(title='Доход')
+axes[1, 0].tick_params(axis='x', rotation=0)
+
+# 5. Образование и доход
+education_income = pd.crosstab(df['education'], df['income']).sort_values('>50K', ascending=False).head(10)
+education_income.plot(kind='bar', ax=axes[1, 1], alpha=0.7)
+axes[1, 1].set_title('Топ-10 образований по высокому доходу')
+axes[1, 1].set_xlabel('Образование')
+axes[1, 1].set_ylabel('Количество')
+axes[1, 1].legend(title='Доход')
+axes[1, 1].tick_params(axis='x', rotation=45)
+
+# 6. Возраст и доход (боксплот)
+df_boxplot = df[df['age'] <= 70]  # Убираем выбросы
+sns.boxplot(x='income', y='age', data=df_boxplot, ax=axes[1, 2])
+axes[1, 2].set_title('Распределение возраста по доходу')
+axes[1, 2].set_xlabel('Доход')
+axes[1, 2].set_ylabel('Возраст')
+
+plt.tight_layout()
+plt.show()
+
+# =============================================================================
+# 7. ДОПОЛНИТЕЛЬНАЯ СТАТИСТИКА
+# =============================================================================
+
+print("\n" + "=" * 60)
+print("ДОПОЛНИТЕЛЬНАЯ СТАТИСТИКА")
+print("=" * 60)
+
+print(" ОСНОВНЫЕ СТАТИСТИКИ ЧИСЛОВЫХ ПЕРЕМЕННЫХ:")
+numeric_stats = df.describe()
+print(numeric_stats)
+
+print("\n РАСПРЕДЕЛЕНИЕ ЦЕЛЕВОЙ ПЕРЕМЕННОЙ (INCOME):")
+income_distribution = df['income'].value_counts(normalize=True) * 100
+print(income_distribution.round(2))
+
+print("\n РАСПРЕДЕЛЕНИЕ ПО ПОЛУ:")
+gender_distribution = df['sex'].value_counts(normalize=True) * 100
+print(gender_distribution.round(2))
+
+# =============================================================================
+# 8. ФИНАЛЬНЫЕ ОТВЕТЫ НА ВОПРОСЫ
+# =============================================================================
+
+print("\n" + "=" * 60)
+print("ФИНАЛЬНЫЕ ОТВЕТЫ НА ВОПРОСЫ")
+print("=" * 60)
+
+print(f"1️⃣ ЧИСЛО СТОЛБЦОВ В НАБОРЕ ДАННЫХ: {q1}")
+
+print(f"\n2️⃣ ПРОПУСКИ В ДАННЫХ: {'Есть' if missing_data.sum() > 0 else 'Нет'}")
+if missing_data.sum() > 0:
+    print(f"   Столбцы с пропусками: {', '.join(columns_with_missing)}")
+
+print(f"\n3️⃣ КОЛИЧЕСТВО УНИКАЛЬНЫХ ЗНАЧЕНИЙ В СТОЛБЦЕ RACE: {q3}")
+print(f"   Уникальные расы: {', '.join(df['race'].unique())}")
+
+print(f"\n4️⃣ МЕДИАНА HOURS-PER-WEEK: {q4}")
+
+print(f"\n5️⃣ КОГО БОЛЬШЕ С ЗП >50K: {result}")
+print(f"   Мужчин с ЗП >50K: {gender_high_income.get('Male', 0)}")
+print(f"   Женщин с ЗП >50K: {gender_high_income.get('Female', 0)}")
+print(f"   Разница: {difference} человек")
+
+print(f"\n6️⃣ ЗАПОЛНЕНИЕ ПРОПУСКОВ: {'Заполнено модой по каждому столбцу' if missing_data.sum() > 0 else 'Пропуски отсутствуют'}")
+print("   Альтернативные методы:")
+print("   - Для числовых данных: медиана, среднее, интерполяция, ML-предсказание")
+print("   - Для категориальных: мода, 'Unknown', KNN, MICE, ML-предсказание")
+
