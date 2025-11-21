@@ -1,0 +1,109 @@
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.feature_selection import mutual_info_classif
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score
+from sklearn.preprocessing import LabelEncoder
+
+# Загрузка данных
+df = pd.read_csv('bank-full.csv', sep=';')
+
+# Выбор нужных столбцов
+columns = ['age', 'job', 'marital', 'education', 'balance', 'housing',
+           'contact', 'day', 'month', 'duration', 'campaign', 'pdays',
+           'previous', 'poutcome', 'y']
+
+df = df[columns]
+
+
+# Вопрос 1
+print("\nВопрос 1:")
+print(f"Самое частое значение education: {df['education'].mode().iloc[0]}")
+
+# Вопрос 2
+print("\nВопрос 2:")
+numeric_cols = ['age', 'balance', 'day', 'duration', 'campaign', 'pdays', 'previous']
+corr_matrix = df[numeric_cols].corr()
+
+# Находим пару с максимальной корреляцией (исключая диагональ)
+corr_stack = corr_matrix.where(np.triu(np.ones_like(corr_matrix, dtype=bool), k=1)).stack()
+max_corr_pair = corr_stack.idxmax()
+max_corr_value = corr_stack.max()
+print(f"Наибольшая корреляция: {max_corr_pair} = {max_corr_value:.3f}")
+
+# Кодирование целевой переменной
+df['y'] = LabelEncoder().fit_transform(df['y'])
+
+# Разделение данных
+X = df.drop('y', axis=1)
+y = df['y']
+X_train, X_temp, y_train, y_temp = train_test_split(X, y, test_size=0.4, random_state=42)
+X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42)
+
+# Вопрос 3
+print("\nВопрос 3:")
+categorical_cols = ['job', 'marital', 'education', 'housing', 'contact', 'month', 'poutcome']
+X_train_categorical = X_train[categorical_cols].astype('category')
+
+mi_scores = mutual_info_classif(X_train_categorical, y_train, discrete_features=True, random_state=42)
+mi_df = pd.DataFrame({'feature': categorical_cols, 'mi_score': np.round(mi_scores, 2)})
+max_mi_feature = mi_df.loc[mi_df['mi_score'].idxmax(), 'feature']
+print(f"Наибольшая взаимная информация: {max_mi_feature}")
+
+# Вопрос 4
+print("\nВопрос 4:")
+X_train_encoded = pd.get_dummies(X_train, columns=categorical_cols)
+X_val_encoded = pd.get_dummies(X_val, columns=categorical_cols)
+
+model = LogisticRegression(solver='liblinear', C=1.0, max_iter=1000, random_state=42)
+model.fit(X_train_encoded, y_train)
+
+val_accuracy = model.score(X_val_encoded, y_val)
+print(f"Точность на валидации: {val_accuracy:.2f}")
+
+# Вопрос 5
+print("\nВопрос 5:")
+features_to_test = ['age', 'balance', 'marital', 'previous']
+
+# Сначала создаем полностью закодированные версии всех данных
+X_train_full_encoded = pd.get_dummies(X_train, columns=categorical_cols)
+X_val_full_encoded = pd.get_dummies(X_val, columns=categorical_cols)
+
+# Обучаем базовую модель на всех признаках
+base_model = LogisticRegression(solver='liblinear', C=1.0, max_iter=1000, random_state=42)
+base_model.fit(X_train_full_encoded, y_train)
+base_accuracy = base_model.score(X_val_full_encoded, y_val)
+
+print(f"Базовая точность: {base_accuracy:.4f}")
+
+diff_scores = {}
+for feature in features_to_test:
+    # Создаем копии данных без тестируемого признака
+    X_train_reduced = X_train.drop(feature, axis=1)
+    X_val_reduced = X_val.drop(feature, axis=1)
+
+    # Определяем актуальные категориальные признаки после удаления
+    current_categorical = [col for col in categorical_cols if col in X_train_reduced.columns]
+
+    # Применяем one-hot кодирование к актуальным признакам
+    X_train_red_encoded = pd.get_dummies(X_train_reduced, columns=current_categorical)
+    X_val_red_encoded = pd.get_dummies(X_val_reduced, columns=current_categorical)
+
+    # Выравниваем столбцы (на случай, если в train и val разные категории)
+    common_cols = X_train_red_encoded.columns.intersection(X_val_red_encoded.columns)
+    X_train_red_encoded = X_train_red_encoded[common_cols]
+    X_val_red_encoded = X_val_red_encoded[common_cols]
+
+    # Обучаем модель
+    model_reduced = LogisticRegression(solver='liblinear', C=1.0, max_iter=1000, random_state=42)
+    model_reduced.fit(X_train_red_encoded, y_train)
+
+    # Считаем точность
+    red_accuracy = model_reduced.score(X_val_red_encoded, y_val)
+    diff_scores[feature] = abs(base_accuracy - red_accuracy)
+    print(f"Без признака {feature}: точность = {red_accuracy:.4f}, разница = {diff_scores[feature]:.4f}")
+
+min_feature = min(diff_scores, key=diff_scores.get)
+print(f"\nНаименьшая разница точности для признака: {min_feature}")
+print("Все разницы точности:", {k: round(v, 4) for k, v in diff_scores.items()})
